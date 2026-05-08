@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Door Dashboard</title>
+    <style>
+        /* Gaya Tampilan Dark Mode Ala Hacker/Security */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1e1e; color: #fff; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; background: #2d2d2d; padding: 20px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.8); }
+        h1 { text-align: center; color: #4CAF50; margin-bottom: 5px; }
+        p.subtitle { text-align: center; color: #95a5a6; margin-top: 0; margin-bottom: 25px; }
+        
+        .video-container { text-align: center; margin: 20px 0; background: #000; border-radius: 8px; overflow: hidden; border: 4px solid #e74c3c; position: relative; transition: all 0.3s ease; box-shadow: 0 0 15px #e74c3c; }
+        .video-container img { width: 100%; max-height: 400px; object-fit: contain; display: block; }
+        
+        .btn-group { text-align: center; margin-bottom: 20px; }
+        .btn { display: inline-block; padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-blue { background-color: #3498db; color: white; }
+        .btn-blue:hover { background-color: #2980b9; }
+        .btn-green { background-color: #2ecc71; color: white; }
+        .btn-green:hover { background-color: #27ae60; }
+        .btn-red { background-color: #e74c3c; color: white; }
+        .btn-red:hover { background-color: #c0392b; }
+        
+        .status-box { padding: 15px; border-radius: 5px; background: #111; text-align: center; font-size: 18px; font-weight: bold; min-height: 25px; border-left: 5px solid #7f8c8d; transition: all 0.3s; }
+        
+        .dev-panel { margin-top: 40px; padding: 20px; background: #2c3e50; border-radius: 8px; text-align: center; border: 1px dashed #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚪 Smart Door Security</h1>
+        <p class="subtitle">Sistem Pengenalan Wajah & Suara Terpusat</p>
+
+        <div class="video-container" id="camera-section">
+            <div id="alignment-overlay" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 8px 20px; border-radius: 8px; font-weight: bold; font-size: 18px; color: #e74c3c; z-index: 10; border: 1px solid #e74c3c; transition: all 0.3s ease;">Mendeteksi Wajah...</div>
+            <img id="live-cam" src="/video_feed" alt="Live Camera ESP32">
+        </div>
+
+        <div class="btn-group" id="main-controls">
+            <button class="btn btn-blue" onclick="scanWajah()">🔍 Pindai Wajah</button>
+            <button class="btn btn-green" id="btn-voice" onclick="toggleVoice()" style="display: none;">🎙️ Mulai Rekam Suara</button>
+        </div>
+
+        <div class="dev-panel" id="otp-section" style="display: none; background: #c0392b; border-color: #e74c3c;">
+            <h3 style="margin-top: 0; color: #fff;">🔒 Verifikasi Email</h3>
+            <p style="color: #ecf0f1; font-size: 14px;">Wajah gagal dikenali 3 kali. Silakan masukkan email penerima untuk mengirimkan kode OTP suara.</p>
+            <input type="email" id="login-email" placeholder="Masukkan Email Anda..." style="padding: 10px; border-radius: 5px; border: none; font-size: 16px; margin-bottom: 10px; width: 80%; max-width: 300px; display: block; margin-left: auto; margin-right: auto; text-align: center;">
+            <button class="btn btn-blue" id="btn-kirim-otp" onclick="requestOTP()" style="background-color: #2980b9; margin-top: 10px;">📧 Kirim OTP</button>
+            <p id="otp-status" style="margin-bottom: 0; margin-top: 15px; font-weight: bold;"></p>
+        </div>
+
+        <div class="status-box" id="status-box" style="color: #bdc3c7;">
+            Sistem Siap. Sedang memantau area pintu...
+        </div>
+
+        <div class="dev-panel" style="background: #203a43; border-color: #3498db; margin-top: 20px;">
+            <h3 style="margin-top: 0; color: #fff;">📸 Registrasi Wajah (Dari HP/Device)</h3>
+            <p style="color: #bdc3c7; font-size: 14px;">Upload foto wajah untuk mendaftar tanpa ESP32 Camera.</p>
+            <input type="text" id="reg-name" placeholder="Masukkan Nama..." style="padding: 10px; border-radius: 5px; border: none; font-size: 16px; margin-bottom: 10px; width: 80%; max-width: 300px; display: block; margin-left: auto; margin-right: auto;">
+            <input type="file" id="reg-file" accept="image/png, image/jpeg" style="margin-bottom: 15px; color: #fff;">
+            <br>
+            <button class="btn btn-blue" onclick="registerWajah()">📤 Upload & Daftarkan</button>
+            <p id="reg-status" style="margin-bottom: 0; margin-top: 15px; font-weight: bold;"></p>
+        </div>
+
+        <div class="dev-panel">
+            <h3 style="margin-top: 0; color: #fff;">🧪 Panel Developer (API Tester)</h3>
+            <p style="color: #bdc3c7; font-size: 14px;">Gunakan tombol ini untuk mengecek pengiriman data ke Web Cloud temanmu tanpa hardware.</p>
+            <button class="btn btn-red" onclick="tembakDummy()">🚀 TEMBAK DATA DUMMY (Ricarda)</button>
+            <p id="pesan-dummy" style="margin-bottom: 0; margin-top: 15px; font-weight: bold; color: #f1c40f;"></p>
+        </div>
+    </div>
+
+    <script>
+        // Auto-refresh status dari Pusat Komando (tiap 1 detik)
+        setInterval(() => {
+            if (typeof isRecording !== 'undefined' && isRecording) return; // Jangan update UI kalau lagi rekam manual
+            
+            fetch('/status')
+                .then(res => res.json())
+                .then(data => {
+                    const statusBox = document.getElementById("status-box");
+                    if (data.reason && data.reason !== statusBox.innerText) {
+                        statusBox.innerText = data.reason;
+                        if (data.akses) {
+                            statusBox.style.color = "#2ecc71";
+                            statusBox.style.borderLeftColor = "#2ecc71";
+                        } else if (data.locked || data.reason.includes("Ditolak") || data.reason.includes("SALAH") || data.reason.includes("DIKUNCI")) {
+                            statusBox.style.color = "#e74c3c";
+                            statusBox.style.borderLeftColor = "#e74c3c";
+                        } else if (data.reason.includes("Suara") || data.reason.includes("🎙️")) {
+                            statusBox.style.color = "#e67e22";
+                            statusBox.style.borderLeftColor = "#e67e22";
+                        } else {
+                            statusBox.style.color = "#bdc3c7";
+                            statusBox.style.borderLeftColor = "#7f8c8d";
+                        }
+                    }
+                })
+                .catch(err => console.log("Sinkronisasi status menunggu server..."));
+        }, 1000);
+
+        // --- LOGIKA ALIGNMENT & AUTO-CAPTURE ---
+        let greenCounter = 0;
+        let isScanning = false;
+
+        function startAlignmentPolling() {
+            setInterval(() => {
+                if (typeof isRecording !== 'undefined' && isRecording) return;
+                if (isScanning) return; // Kalau sedang menscan, jangan ngecek alignment
+                if (document.getElementById("camera-section").style.display === "none") return; // Kalau pindah ke mode suara
+
+                fetch('/alignment')
+                    .then(res => res.json())
+                    .then(data => {
+                        const camSection = document.getElementById("camera-section");
+                        const alignOverlay = document.getElementById("alignment-overlay");
+                        
+                        alignOverlay.innerText = data.status;
+                        
+                        if (data.color === "green") {
+                            camSection.style.borderColor = "#2ecc71";
+                            camSection.style.boxShadow = "0 0 20px #2ecc71";
+                            alignOverlay.style.color = "#2ecc71";
+                            alignOverlay.style.borderColor = "#2ecc71";
+                            greenCounter++;
+                            
+                            if (greenCounter >= 4) { // 4 * 500ms = 2 detik
+                                isScanning = true;
+                                greenCounter = 0;
+                                
+                                alignOverlay.innerText = "📸 Mengambil Foto...";
+                                alignOverlay.style.color = "#fff";
+                                alignOverlay.style.borderColor = "#3498db";
+                                camSection.style.borderColor = "#3498db";
+                                camSection.style.boxShadow = "0 0 20px #3498db";
+                                
+                                scanWajah();
+                            }
+                        } else if (data.color === "orange") {
+                            camSection.style.borderColor = "#e67e22";
+                            camSection.style.boxShadow = "0 0 20px #e67e22";
+                            alignOverlay.style.color = "#e67e22";
+                            alignOverlay.style.borderColor = "#e67e22";
+                            greenCounter = 0;
+                        } else {
+                            camSection.style.borderColor = "#e74c3c";
+                            camSection.style.boxShadow = "0 0 20px #e74c3c";
+                            alignOverlay.style.color = "#e74c3c";
+                            alignOverlay.style.borderColor = "#e74c3c";
+                            greenCounter = 0;
+                        }
+                    })
+                    .catch(err => console.log("Menunggu alignment data..."));
+            }, 500);
+        }
+
+        // Jalankan polling saat halaman dimuat
+        startAlignmentPolling();
+
+        // 1. Fungsi Mengeksekusi DeepFace
+        function scanWajah() {
+            isScanning = true;
+            greenCounter = 0;
+            const statusBox = document.getElementById("status-box");
+            statusBox.style.color = "#f1c40f"; // Kuning
+            statusBox.style.borderLeftColor = "#f1c40f";
+            statusBox.innerText = "⏳ Memproses Wajah dengan AI DeepFace...";
+
+            fetch('/recognize', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    if(data.akses) {
+                        statusBox.style.color = "#2ecc71"; // Hijau
+                        statusBox.style.borderLeftColor = "#2ecc71";
+                        statusBox.innerText = `🔓 Akses Diterima! Halo, ${data.nama.toUpperCase()} (Kecocokan: ${data.confidence}%)`;
+                        setTimeout(() => { isScanning = false; }, 5000); // 5 detik istirahat setelah sukses
+                    } else {
+                        statusBox.style.color = "#e74c3c"; // Merah
+                        statusBox.style.borderLeftColor = "#e74c3c";
+                        statusBox.innerText = `🔒 Akses Ditolak! ${data.reason}`;
+                        
+                        // Jika gagal 3x, otomatis pindah ke bagian form email
+                        if(data.switch_to_voice) {
+                            setTimeout(() => {
+                                document.getElementById("camera-section").style.display = "none";
+                                document.getElementById("main-controls").style.display = "none";
+                                document.getElementById("otp-section").style.display = "block";
+                            }, 1500); 
+                            // isScanning biarkan true agar tidak mendeteksi lagi
+                        } else {
+                            setTimeout(() => { isScanning = false; }, 3000); // 3 detik jeda jika gagal
+                        }
+                    }
+                })
+                .catch(err => {
+                    statusBox.style.color = "#e74c3c";
+                    statusBox.innerText = "❌ Error: Tidak dapat terhubung ke Server Python.";
+                    setTimeout(() => { isScanning = false; }, 3000);
+                });
+        }
+
+        // 2. Fungsi Merekam Suara (Mic INMP441)
+        let isRecording = false;
+        function toggleVoice() {
+            const btnVoice = document.getElementById("btn-voice");
+            const statusBox = document.getElementById("status-box");
+
+            if (!isRecording) {
+                // Perintah Mulai Rekam
+                fetch('/start_voice')
+                    .then(() => {
+                        isRecording = true;
+                        btnVoice.innerText = "⏹️ Berhenti Merekam";
+                        btnVoice.classList.replace("btn-green", "btn-red");
+                        statusBox.style.color = "#e67e22"; // Oranye
+                        statusBox.style.borderLeftColor = "#e67e22";
+                        statusBox.innerText = "🔴 Mendengarkan suara... Ucapkan 'Satu Dua Tiga'.";
+                    });
+            } else {
+                // Perintah Berhenti & Proses AI Google
+                isRecording = false;
+                btnVoice.innerText = "🎙️ Mulai Rekam Suara";
+                btnVoice.classList.replace("btn-red", "btn-green");
+                statusBox.style.color = "#f1c40f";
+                statusBox.style.borderLeftColor = "#f1c40f";
+                statusBox.innerText = "⏳ Sedang memproses ucapan ke AI Google...";
+
+                fetch('/stop_voice')
+                    .then(res => res.json())
+                    .then(data => {
+                        if(data.status === "sukses") {
+                            statusBox.style.color = "#2ecc71";
+                            statusBox.style.borderLeftColor = "#2ecc71";
+                            statusBox.innerText = data.pesan;
+                        } else {
+                            statusBox.style.color = "#e74c3c";
+                            statusBox.style.borderLeftColor = "#e74c3c";
+                            statusBox.innerText = data.pesan;
+                        }
+                    });
+            }
+        }
+
+        // 3. Fungsi Menembak Cloud API (Dummy)
+        function requestOTP() {
+            const emailInput = document.getElementById("login-email").value;
+            const otpStatus = document.getElementById("otp-status");
+
+            if(!emailInput) {
+                otpStatus.style.color = "#f1c40f";
+                otpStatus.innerText = "⚠️ Masukkan email terlebih dahulu!";
+                return;
+            }
+
+            otpStatus.style.color = "#f1c40f";
+            otpStatus.innerText = "⏳ Mengecek database dan mengirim email...";
+            document.getElementById("btn-kirim-otp").disabled = true;
+
+            fetch('/request_otp', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email: emailInput })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById("btn-kirim-otp").disabled = false;
+                if(data.status === "sukses") {
+                    otpStatus.style.color = "#2ecc71";
+                    otpStatus.innerText = "✅ " + data.pesan;
+                    
+                    // Sembunyikan form email, tampilkan tombol mic
+                    setTimeout(() => {
+                        document.getElementById("otp-section").style.display = "none";
+                        document.getElementById("main-controls").style.display = "block";
+                        document.getElementById("btn-voice").style.display = "inline-block";
+                        
+                        // Otomatis mulai rekam suara
+                        if(!isRecording) {
+                            toggleVoice();
+                        }
+                    }, 2000);
+                } else {
+                    otpStatus.style.color = "#ecf0f1";
+                    otpStatus.innerText = "❌ " + data.pesan;
+                }
+            })
+            .catch(err => {
+                document.getElementById("btn-kirim-otp").disabled = false;
+                otpStatus.style.color = "#ecf0f1";
+                otpStatus.innerText = "❌ Gagal menghubungi server.";
+            });
+        }
+
+        // 4. Fungsi Menembak Cloud API (Dummy)
+        function tembakDummy() {
+            const pesanDummy = document.getElementById("pesan-dummy");
+            pesanDummy.style.color = "#f1c40f";
+            pesanDummy.innerText = "⏳ Menembak data ke Restuwah Cloud...";
+
+            fetch('/test_dummy_api')
+                .then(res => res.json())
+                .then(data => {
+                    pesanDummy.style.color = "#2ecc71";
+                    pesanDummy.innerText = "✅ " + data.pesan;
+                })
+                .catch(err => {
+                    pesanDummy.style.color = "#e74c3c";
+                    pesanDummy.innerText = "❌ Error: Gagal menghubungi server lokal.";
+                });
+        }
+
+        // 4. Fungsi Registrasi Wajah
+        function registerWajah() {
+            const nameInput = document.getElementById("reg-name").value;
+            const fileInput = document.getElementById("reg-file").files[0];
+            const statusText = document.getElementById("reg-status");
+
+            if(!nameInput || !fileInput) {
+                statusText.style.color = "#e74c3c";
+                statusText.innerText = "⚠️ Nama dan Foto harus diisi!";
+                return;
+            }
+
+            statusText.style.color = "#f1c40f";
+            statusText.innerText = "⏳ Sedang mengupload dan melatih AI...";
+
+            const formData = new FormData();
+            formData.append("nama", nameInput);
+            formData.append("file", fileInput);
+
+            fetch('/register_face', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === "sukses") {
+                    statusText.style.color = "#2ecc71";
+                    statusText.innerText = "✅ " + data.pesan;
+                    document.getElementById("reg-name").value = "";
+                    document.getElementById("reg-file").value = "";
+                } else {
+                    statusText.style.color = "#e74c3c";
+                    statusText.innerText = "❌ " + data.pesan;
+                }
+            })
+            .catch(err => {
+                statusText.style.color = "#e74c3c";
+                statusText.innerText = "❌ Error Mendaftar Wajah.";
+            });
+        }
+    </script>
+</body>
+</html>
